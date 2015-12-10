@@ -146,37 +146,38 @@ class CI_Session_database_driver extends CI_Session_driver implements SessionHan
 		{
 			// Needed by write() to detect session_regenerate_id() calls
 			$this->_session_id = $session_id;
-
-			$this->_db
-				->select('data')
-				->from($this->_config['save_path'])
-				->where('id', $session_id);
-
-			if ($this->_config['match_ip'])
-			{
-				$this->_db->where('ip_address', $_SERVER['REMOTE_ADDR']);
+			if ($this->_db->table_exists($this->_config['save_path'])) {
+				$this->_db
+					->select('data')
+					->from($this->_config['save_path'])
+					->where('id', $session_id);
+	
+				if ($this->_config['match_ip'])
+				{
+					$this->_db->where('ip_address', $_SERVER['REMOTE_ADDR']);
+				}
+	
+				if (($result = $this->_db->get()->row()) === NULL)
+				{
+					// PHP7 will reuse the same SessionHandler object after
+					// ID regeneration, so we need to explicitly set this to
+					// FALSE instead of relying on the default ...
+					$this->_row_exists = FALSE;
+					$this->_fingerprint = md5('');
+					return '';
+				}
+	
+				// PostgreSQL's variant of a BLOB datatype is Bytea, which is a
+				// PITA to work with, so we use base64-encoded data in a TEXT
+				// field instead.
+				$result = ($this->_platform === 'postgre')
+					? base64_decode(rtrim($result->data))
+					: $result->data;
+	
+				$this->_fingerprint = md5($result);
+				$this->_row_exists = TRUE;
+				return $result;
 			}
-
-			if (($result = $this->_db->get()->row()) === NULL)
-			{
-				// PHP7 will reuse the same SessionHandler object after
-				// ID regeneration, so we need to explicitly set this to
-				// FALSE instead of relying on the default ...
-				$this->_row_exists = FALSE;
-				$this->_fingerprint = md5('');
-				return '';
-			}
-
-			// PostgreSQL's variant of a BLOB datatype is Bytea, which is a
-			// PITA to work with, so we use base64-encoded data in a TEXT
-			// field instead.
-			$result = ($this->_platform === 'postgre')
-				? base64_decode(rtrim($result->data))
-				: $result->data;
-
-			$this->_fingerprint = md5($result);
-			$this->_row_exists = TRUE;
-			return $result;
 		}
 
 		$this->_fingerprint = md5('');
